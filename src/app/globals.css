@@ -1,0 +1,134 @@
+@import "tailwindcss";
+
+/*
+ * Palette: the validated data-viz reference instance.
+ * Categorical slots are assigned in fixed order and never cycled —
+ * slot 1 (blue) = sauce / plan / revenue, slot 2 (orange) = rub / actual,
+ * slot 3 (aqua) = operating profit. "Needed" uses an ordinal step of the
+ * sauce hue, because now-vs-needed is one measure at two magnitudes.
+ * Status colors are reserved for status and always ship with a label.
+ */
+:root {
+  color-scheme: light;
+  --c-page: #f9f9f7;
+  --c-surface: #fcfcfb;
+  --c-raise: #ffffff;
+  --c-ink: #0b0b0b;
+  --c-ink-2: #52514e;
+  --c-muted: #898781;
+  --c-grid: #e1e0d9;
+  --c-axis: #c3c2b7;
+  --c-hair: rgba(11, 11, 11, 0.1);
+  --c-wash: rgba(11, 11, 11, 0.04);
+
+  --series-sauce: #2a78d6;
+  --series-rub: #eb6834;
+  --series-profit: #1baf7a;
+  --series-needed: #86b6ef;
+
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+  --status-none: #c3c2b7;
+  --success-text: #006300;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --c-page: #0d0d0d;
+    --c-surface: #1a1a19;
+    --c-raise: #222221;
+    --c-ink: #ffffff;
+    --c-ink-2: #c3c2b7;
+    --c-muted: #898781;
+    --c-grid: #2c2c2a;
+    --c-axis: #383835;
+    --c-hair: rgba(255, 255, 255, 0.1);
+    --c-wash: rgba(255, 255, 255, 0.05);
+
+    --series-sauce: #3987e5;
+    --series-rub: #d95926;
+    --series-profit: #199e70;
+    --series-needed: #184f95;
+
+    --status-none: #383835;
+    --success-text: #0ca30c;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --c-page: #0d0d0d;
+  --c-surface: #1a1a19;
+  --c-raise: #222221;
+  --c-ink: #ffffff;
+  --c-ink-2: #c3c2b7;
+  --c-muted: #898781;
+  --c-grid: #2c2c2a;
+  --c-axis: #383835;
+  --c-hair: rgba(255, 255, 255, 0.1);
+  --c-wash: rgba(255, 255, 255, 0.05);
+
+  --series-sauce: #3987e5;
+  --series-rub: #d95926;
+  --series-profit: #199e70;
+  --series-needed: #184f95;
+
+  --status-none: #383835;
+  --success-text: #0ca30c;
+}
+
+@theme inline {
+  --color-page: var(--c-page);
+  --color-surface: var(--c-surface);
+  --color-raise: var(--c-raise);
+  --color-ink: var(--c-ink);
+  --color-ink2: var(--c-ink-2);
+  --color-muted: var(--c-muted);
+  --color-grid: var(--c-grid);
+  --color-axis: var(--c-axis);
+  --color-hair: var(--c-hair);
+  --color-wash: var(--c-wash);
+
+  --color-sauce: var(--series-sauce);
+  --color-rub: var(--series-rub);
+  --color-profit: var(--series-profit);
+  --color-needed: var(--series-needed);
+
+  --color-good: var(--status-good);
+  --color-warn: var(--status-warning);
+  --color-serious: var(--status-serious);
+  --color-critical: var(--status-critical);
+  --color-nodata: var(--status-none);
+  --color-successtext: var(--success-text);
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html {
+  background: var(--c-page);
+}
+
+body {
+  background: var(--c-page);
+  color: var(--c-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Columns of numbers align; big standalone figures use proportional digits. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.recharts-surface:focus,
+.recharts-wrapper:focus {
+  outline: none;
+}
+
+/* Recharts draws its own cursor fill; keep it a quiet wash in both themes. */
+.recharts-tooltip-cursor {
+  fill: var(--c-wash);
+}
