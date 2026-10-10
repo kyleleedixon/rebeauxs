@@ -12,7 +12,9 @@ import { NextResponse, type NextRequest } from "next/server";
  * (Next 16 renamed the middleware convention to `proxy`.)
  */
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // /api/revalidate is excluded: it carries its own token and has to stay
+  // reachable by the Sheet's script even when a site password is set.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/revalidate).*)"],
 };
 
 function safeEqual(a: string, b: string): boolean {

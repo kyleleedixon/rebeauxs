@@ -46,6 +46,7 @@ Copy `.env.example` to `.env.local` for local work.
 | `GOOGLE_PRIVATE_KEY` | `private_key` from the key JSON, newlines written as `\n`, wrapped in double quotes |
 | `DASHBOARD_USER` | Username for the site password prompt (default `rbx`). Only used if a password is set. |
 | `DASHBOARD_PASSWORD` | Optional. Set it and the whole site asks for a password; leave it unset and the site is open to anyone with the URL. |
+| `REVALIDATE_TOKEN` | Shared secret the Sheet uses to say "I changed, refresh". Optional — without it the dashboard just refreshes on its own 5-minute cycle. |
 | `DEMO_MODE` | Local layout work only — see below. Leave unset everywhere else. |
 
 `GOOGLE_PRIVATE_KEY` must look like this, on one line:
@@ -156,6 +157,37 @@ and skipped.
   names the failed range in a banner.
 - If the credentials are missing entirely, the page shows a setup checklist instead
   of an error.
+
+## 7a · Instant refresh when the Sheet changes
+
+Without this, an edit shows up within about five minutes. With it, the Sheet
+pings the dashboard the moment you change a cell and the next load is current.
+
+1. **Add `REVALIDATE_TOKEN`** to the Vercel environment variables — any long
+   random string (`openssl rand -hex 24`). Redeploy so it takes effect.
+2. In the Sheet: **Extensions → Apps Script**. Delete the placeholder code and
+   paste the contents of [`scripts/sheet-refresh.gs`](scripts/sheet-refresh.gs).
+3. Set the two constants at the top: `DASHBOARD_ENDPOINT` to
+   `https://<your-domain>/api/revalidate`, and `REVALIDATE_TOKEN` to the same
+   value you put in Vercel. Save.
+4. **Install the trigger** — the clock icon in the left sidebar (*Triggers*) →
+   *Add Trigger* → function `onSheetEdit`, source *From spreadsheet*, type
+   *On edit* → Save, and authorise when Google asks.
+5. Test it: run `pingNow` from the Apps Script toolbar. A toast saying
+   "Dashboard refreshed" means it works. HTTP 401 means the tokens don't match;
+   503 means `REVALIDATE_TOKEN` isn't set on the deployment yet.
+
+Notes:
+
+- A *simple* `onEdit(e)` cannot do this — simple triggers are not allowed to call
+  external URLs. It has to be the installed trigger from step 4.
+- Pings are throttled to one per 15 seconds, so typing a column of numbers does
+  not fire dozens of refreshes.
+- Only human edits fire the trigger. A formula recalculating on its own, or a
+  change made by another script, does not — those are picked up by the ordinary
+  5-minute refresh, which stays on as a backstop.
+- `/api/revalidate` returns nothing but `{ok: true}`. It serves no Sheet data,
+  and it is the only route exempt from the site password (it has its own token).
 
 ## 8 · Local layout work without credentials
 
