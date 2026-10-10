@@ -69,6 +69,12 @@ export function smart(label: string, v: number | string | null): string {
   if (v === null || v === "") return "—";
   if (typeof v === "string") return v;
   const l = label.toLowerCase();
+  // "Month the first money is needed" holds a date serial; "First month new
+  // stores are added" holds a plain month number. Decide by size, and do it
+  // before the money test — several month labels also mention cash.
+  if (/^month\b/.test(l) || l.includes("first month") || l.includes("month it") || l.includes("month number")) {
+    return v >= 20000 && v <= 80000 ? longMonth(serialToISO(v), count(v)) : count(v);
+  }
   // Per-unit money shows cents; monthly totals and lump sums do not.
   const perUnit =
     l.includes("per bottle") ||
@@ -78,7 +84,11 @@ export function smart(label: string, v: number | string | null): string {
     l.includes("cost per") ||
     l.includes("price");
   const isPercent =
-    l.includes("%") || l.includes("percent") || l.includes("margin") || l.includes("share");
+    l.includes("%") ||
+    l.includes("percent") ||
+    l.includes("margin") ||
+    l.includes("share") ||
+    l.includes("growth");
   const isMoney =
     l.includes("$") ||
     l.includes("cost") ||

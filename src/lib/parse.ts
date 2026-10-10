@@ -45,6 +45,7 @@ function num(v: Cell): number | null {
 function numOrStr(v: Cell): number | string | null {
   const n = num(v);
   if (n !== null) return n;
+  if (isSheetError(v)) return null;
   const s = str(v);
   return s === "" ? null : s;
 }
@@ -78,6 +79,19 @@ const has = (cells: string[], needle: string, cols?: number[]): boolean =>
 
 const isBlank = (v: Cell) => str(v) === "";
 
+/**
+ * How many cells in a row carry anything. Header rows are wide; the prose
+ * sentences the Sheet puts above each table occupy a single cell. Requiring a
+ * width is what stops "...only after the next gate covers the bigger run..."
+ * from being mistaken for the gate table's header.
+ */
+const filled = (cells: string[]) => cells.filter((c) => c !== "").length;
+
+/** #REF!, #N/A, #VALUE! ... — a broken formula is no data, not a label. */
+const SHEET_ERROR = /^#(ref|value|div\/0|name|null|num|n\/a|error)[!?]?/i;
+const isSheetError = (v: Cell): boolean =>
+  typeof v === "string" && SHEET_ERROR.test(v.trim());
+
 /* --------------------------------- Inputs ---------------------------------- */
 /* Every Inputs block is located by its header/label text — row numbers move. */
 
@@ -86,8 +100,9 @@ function inputsLayout(g: Grid) {
   const eventsHeader = findRowIndex(
     g,
     (cells) =>
-      has(cells, "registration") ||
-      (has(cells, "items") && (has(cells, "repeat") || has(cells, "times per month"))),
+      filled(cells) >= 4 &&
+      (has(cells, "registration") ||
+        (has(cells, "items") && (has(cells, "repeat") || has(cells, "times per month")))),
   );
 
   // The tier table is the run of rows whose column A is a bottle count (a number)
@@ -164,6 +179,10 @@ function parseEvents(g: Grid, eventsHeader: number): EventRow[] {
   for (let r = eventsHeader + 1; r < g.length; r++) {
     const name = str(at(g, r, 0));
     if (!name) break;
+    // A sentence under the table ("All event figures are guesses...") fills only
+    // column A. A real event carries numbers beside its name.
+    const hasDetail = [1, 2, 3, 4, 5, 6, 7].some((c) => !isBlank(at(g, r, c)));
+    if (!hasDetail) break;
     out.push({
       name,
       items: numOrStr(at(g, r, 1)),
@@ -243,7 +262,10 @@ function parseForecast(g: Grid): {
   headerIndex: number;
 } {
   const headerIndex = Math.max(
-    findRowIndex(g, (cells) => has(cells, "month") && has(cells, "revenue")),
+    findRowIndex(
+      g,
+      (cells) => filled(cells) >= 8 && has(cells, "month") && has(cells, "revenue"),
+    ),
     -1,
   );
   const start = headerIndex >= 0 ? headerIndex + 1 : 4;
@@ -280,14 +302,24 @@ function parseForecast(g: Grid): {
 
 /** Gate table: header found by text, rows read until the first blank gate name. */
 function parseGates(g: Grid): { gates: GateRow[]; headerIndex: number } {
-  const headerIndex = findRowIndex(
+  const strict = findRowIndex(
     g,
-    (cells) =>
-      (cells[0] ?? "").includes("gate") &&
-      (has(cells, "run") || has(cells, "cost per bottle") || has(cells, "cash")),
+    (cells) => (cells[0] ?? "") === "gate" && filled(cells) >= 4,
     0,
     20,
   );
+  const headerIndex =
+    strict >= 0
+      ? strict
+      : findRowIndex(
+          g,
+          (cells) =>
+            (cells[0] ?? "").startsWith("gate") &&
+            filled(cells) >= 4 &&
+            (has(cells, "run") || has(cells, "cost per bottle")),
+          0,
+          20,
+        );
   const start = headerIndex >= 0 ? headerIndex + 1 : 4;
   const gates: GateRow[] = [];
   for (let r = start; r < Math.min(start + 8, g.length); r++) {
@@ -324,22 +356,47 @@ function columnABlocks(g: Grid, from: number): { start: number; end: number }[] 
   return blocks;
 }
 
-function parseLabelValueMeaning(g: Grid, start: number, end: number): KeyNumber[] {
-  const out: KeyNumber[] = [];
-  for (let r = start; r <= end; r++) {
+interface LabelledBlock {
+  title: string;
+  header: string[];
+  rows: KeyNumber[];
+}
+
+/**
+ * A label/value/meaning block. In the real Sheet each one is preceded by a
+ * title in column A alone ("Key numbers", "Profit per bottle sold to a store")
+ * and then a header row ("Measure | Value | What it means"). Both are kept so
+ * the UI can echo the Sheet's wording, and neither is mistaken for data.
+ */
+function parseLabelledBlock(g: Grid, start: number, end: number): LabelledBlock {
+  let title = "";
+  let header: string[] = [];
+  let first = start;
+
+  // A title row fills column A and nothing beside it.
+  if (!isBlank(at(g, first, 0)) && isBlank(at(g, first, 1)) && isBlank(at(g, first, 2))) {
+    title = str(at(g, first, 0));
+    first += 1;
+  }
+
+  // A header row is text in B and C with a number directly underneath it.
+  const bIsText = num(at(g, first, 1)) === null && !isBlank(at(g, first, 1));
+  const cIsText = !isBlank(at(g, first, 2));
+  if (bIsText && cIsText && num(at(g, first + 1, 1)) !== null) {
+    header = headerRow(g, first).slice(0, 3);
+    first += 1;
+  }
+
+  const rows: KeyNumber[] = [];
+  for (let r = first; r <= end; r++) {
     const measure = str(at(g, r, 0));
     if (!measure) continue;
     const value = numOrStr(at(g, r, 1));
     const meaning = str(at(g, r, 2));
-    const isHeader =
-      normalize(value === null ? "" : String(value)) === "value" ||
-      normalize(meaning) === "what it means" ||
-      normalize(meaning) === "meaning";
-    if (isHeader) continue;
     if (value === null && meaning === "") continue;
-    out.push({ measure, value, meaning });
+    rows.push({ measure, value, meaning });
   }
-  return out;
+  return { title, header, rows };
 }
 
 /** A labelled block in the right-hand columns, read until the first blank label. */
@@ -364,6 +421,7 @@ function parseLacking(g: Grid): { rows: LackingRow[]; header: string[] } {
   const headerIndex = findRowIndex(g, (cells) => {
     const right = cells.slice(8, 12);
     return (
+      filled(right) >= 3 &&
       right.some((c) => c.includes("needed")) &&
       right.some((c) => c.includes("gap") || c.includes("now"))
     );
@@ -386,7 +444,10 @@ function parseLacking(g: Grid): { rows: LackingRow[]; header: string[] } {
 function parseStagedAsk(g: Grid): { rows: StagedAskRow[]; header: string[] } {
   const headerIndex = findRowIndex(g, (cells) => {
     const right = cells.slice(8, 11);
-    return right.some((c) => c.includes("raised")) || right.some((c) => c.includes("added"));
+    return (
+      filled(right) >= 3 &&
+      (right.some((c) => c.includes("raised")) || right.some((c) => c.includes("added")))
+    );
   });
   const { header, rows } = rightBlock(g, headerIndex, 8, 3, 16);
   const out = rows
@@ -405,7 +466,11 @@ function parseStagedAsk(g: Grid): { rows: StagedAskRow[]; header: string[] } {
 function parseActuals(g: Grid): { rows: ActualRow[]; header: string[] } {
   const headerIndex = findRowIndex(g, (cells) => {
     const right = cells.slice(8, 11);
-    return right.some((c) => c.includes("actual")) && right.some((c) => c.includes("plan"));
+    return (
+      filled(right) >= 3 &&
+      right.some((c) => c.includes("actual")) &&
+      right.some((c) => c.includes("plan"))
+    );
   });
   const { header, rows } = rightBlock(g, headerIndex, 8, 3, 20);
   const out: ActualRow[] = rows
@@ -435,7 +500,8 @@ function trackStatus(v: Cell): TrackStatus {
 function parsePlanActual(g: Grid): { rows: PlanActualRow[]; headerIndex: number } {
   const headerIndex = findRowIndex(
     g,
-    (cells) => has(cells, "plan") && has(cells, "actual") && has(cells, "month"),
+    (cells) =>
+      filled(cells) >= 8 && has(cells, "plan") && has(cells, "actual") && has(cells, "month"),
     0,
     12,
   );
@@ -507,7 +573,7 @@ function storeStatus(v: Cell): StoreStatus {
 function parseStores(g: Grid): { rows: StoreRow[]; header: string[] } {
   const headerIndex = findRowIndex(
     g,
-    (cells) => (cells[0] ?? "").includes("store") && has(cells, "bottles"),
+    (cells) => (cells[0] ?? "") === "store" && filled(cells) >= 4,
     0,
     12,
   );
@@ -537,7 +603,7 @@ function parseStores(g: Grid): { rows: StoreRow[]; header: string[] } {
 function parseLog(g: Grid): { log: LogAggregates; header: string[] } {
   const headerIndex = findRowIndex(
     g,
-    (cells) => (cells[0] ?? "").includes("date") && has(cells, "type"),
+    (cells) => (cells[0] ?? "") === "date" && filled(cells) >= 5,
     0,
     12,
   );
@@ -701,19 +767,17 @@ export function parseDashboard(
   const { months: forecast, totals: forecastTotals, headerIndex: fHeader } = parseForecast(gf);
 
   const { gates, headerIndex: gateHeader } = parseGates(gm);
-  const blocks = columnABlocks(gm, gateHeader + gates.length + 1);
-  const keyNumbers = blocks[0] ? parseLabelValueMeaning(gm, blocks[0].start, blocks[0].end) : [];
-  const unitEconomics = blocks
-    .slice(1)
-    .flatMap((b) => parseLabelValueMeaning(gm, b.start, b.end));
-
-  const keyNumbersHeader = (() => {
-    if (!blocks[0]) return [];
-    const inBlock = normRow(gm, blocks[0].start);
-    const isHeader =
-      (inBlock[1] ?? "") === "value" || (inBlock[2] ?? "").includes("mean");
-    return headerRow(gm, isHeader ? blocks[0].start : blocks[0].start - 1).slice(0, 3);
-  })();
+  const blocks = columnABlocks(gm, gateHeader + gates.length + 1).map((b) =>
+    parseLabelledBlock(gm, b.start, b.end),
+  );
+  const keyNumbers = blocks[0]?.rows ?? [];
+  const keyNumbersHeader = blocks[0]?.header ?? [];
+  // Anything below the key numbers is a second table — unit economics in the
+  // real Sheet, under its own title ("Profit per bottle sold to a store").
+  const unitBlocks = blocks.slice(1).filter((b) => b.rows.length > 0);
+  const unitEconomics = unitBlocks.flatMap((b) => b.rows);
+  const unitEconomicsHeader = unitBlocks[0]?.header ?? [];
+  const unitEconomicsTitle = unitBlocks[0]?.title ?? "";
 
   const lackingBlock = parseLacking(gm);
   const stagedBlock = parseStagedAsk(gm);
@@ -735,39 +799,81 @@ export function parseDashboard(
   const cells = {
     totalCapitalNeeded:
       byLabel(keyNumbers, [
+        "total money the business needs",
+        "total money",
         "total capital needed",
-        "total money to raise",
-        "money to raise",
         "total capital",
+        "money to raise",
         "capital needed",
         "total to raise",
       ]) ?? keyNumbers[0] ?? null,
     firstMonthMoneyNeeded:
       byLabel(keyNumbers, [
+        "month the first money is needed",
+        "first money is needed",
         "first month money is needed",
-        "first month money",
-        "first month you need money",
         "month money is needed",
+        "first month you need money",
         "when money is needed",
         "first month cash",
       ]) ?? keyNumbers[1] ?? null,
     sauceCostInStock:
       byLabel(keyNumbers, [
+        "cost per sauce bottle in stock",
         "sauce cost per bottle in stock",
+        "bottle in stock",
         "cost per bottle in stock",
-        "sauce cost in stock",
         "average sauce cost",
-        "avg sauce cost",
-      ]) ?? keyNumbers[12] ?? null,
-    sauceCostTarget:
-      byLabel(keyNumbers, [
+      ]) ?? null,
+    // The target lives on the Inputs tab in the real Sheet, not in the key
+    // numbers. Fall back to a "target" key number, then to deriving it from the
+    // stated gap, then to the "needed" side of the matching shortfall row.
+    sauceCostTarget: (() => {
+      const fromInput = findInput(inputs, [
+        "target cost per sauce bottle",
+        "target cost per bottle",
+        "target sauce cost",
+        "target cost",
+      ]);
+      if (fromInput && typeof fromInput.value === "number") {
+        return {
+          measure: fromInput.label,
+          value: fromInput.value,
+          meaning: fromInput.note,
+        };
+      }
+      const fromKey = byLabel(keyNumbers, [
         "target sauce cost per bottle",
         "target cost per bottle",
         "sauce cost target",
         "target sauce cost",
-        "cost per bottle target",
-        "target",
-      ]) ?? keyNumbers[13] ?? null,
+      ]);
+      if (fromKey && typeof fromKey.value === "number") return fromKey;
+
+      const inStock = byLabel(keyNumbers, [
+        "cost per sauce bottle in stock",
+        "bottle in stock",
+      ]);
+      const gap = byLabel(keyNumbers, ["gap to the target", "gap to target"]);
+      if (typeof inStock?.value === "number" && typeof gap?.value === "number") {
+        return {
+          measure: "Target cost per sauce bottle",
+          value: inStock.value - gap.value,
+          meaning: gap.meaning || "Derived from the stated gap to target.",
+        };
+      }
+      const fromLacking = lackingBlock.rows.find(
+        (r) => /cost/i.test(r.item) && /target/i.test(r.item) && r.needed !== null,
+      );
+      if (fromLacking) {
+        return {
+          measure: "Target cost per sauce bottle",
+          value: fromLacking.needed,
+          meaning: "From the shortfall table.",
+        };
+      }
+      return null;
+    })(),
   };
 
   const year1 = forecast.slice(0, 12);
@@ -799,8 +905,12 @@ export function parseDashboard(
     [...planActual].reverse().find((p) => p.investmentToDate !== null) ?? null;
 
   const monthsWithActuals = planActual.filter((p) => !p.noData).length;
-  const hasActuals =
-    logBlock.log.hasRows || monthsWithActuals > 0 || actualsBlock.rows.some((a) => !a.empty);
+  /**
+   * Only the Log (and the Plan vs Actual columns it feeds) count as actuals.
+   * The Milestones block is formulas: with nothing logged they return 0, which
+   * must not be mistaken for "we sold zero".
+   */
+  const hasActuals = logBlock.log.hasRows || monthsWithActuals > 0;
 
   const perStore = byLabel(actualsBlock.rows, [
     "bottles per store per month",
@@ -832,6 +942,8 @@ export function parseDashboard(
       stagedAsk: stagedBlock.header,
       actuals: actualsBlock.header,
       keyNumbers: keyNumbersHeader,
+      unitEconomics: unitEconomicsHeader,
+      unitEconomicsTitle: unitEconomicsTitle ? [unitEconomicsTitle] : [],
       events: headerRow(gi, layout.eventsHeader).slice(0, 8),
       tiers: layout.tierStart > 0 ? headerRow(gi, layout.tierStart - 1).slice(0, 3) : [],
       forecast: headerRow(gf, fHeader),
@@ -842,8 +954,13 @@ export function parseDashboard(
     derived: {
       year1Revenue: sum(year1.map((m) => m.revenue)),
       year1Profit: sum(year1.map((m) => m.operatingProfit)),
-      monthsOutOfSauce: forecast.filter((m) => m.sauceLeft !== null && m.sauceLeft < 0).length,
-      monthsOutOfRub: forecast.filter((m) => m.rubLeft !== null && m.rubLeft < 0).length,
+      // The Sheet counts these itself; fall back to counting negative stock months.
+      monthsOutOfSauce:
+        numberOf(byLabel(keyNumbers, ["months you run out of sauce", "months out of sauce"])?.value) ??
+        forecast.filter((m) => m.sauceLeft !== null && m.sauceLeft < 0).length,
+      monthsOutOfRub:
+        numberOf(byLabel(keyNumbers, ["months you run out of rub", "months out of rub"])?.value) ??
+        forecast.filter((m) => m.rubLeft !== null && m.rubLeft < 0).length,
       guessCount,
       realCount,
       guessShare: statusable.length ? guessCount / statusable.length : null,

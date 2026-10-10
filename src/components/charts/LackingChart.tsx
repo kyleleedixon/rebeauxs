@@ -33,6 +33,10 @@ export type LackingPoint = {
 export function LackingChart({ data }: { data: LackingPoint[] }) {
   const height =
     data.length > 5 ? "h-[300px] sm:h-[320px]" : "h-[220px] sm:h-[250px]";
+  // Rows can be past their target — the axis has to show that rather than clip it.
+  const peak = data.reduce((acc, d) => (d.pct !== null && d.pct > acc ? d.pct : acc), 0);
+  const max = Math.max(110, Math.ceil(peak / 25) * 25);
+  const ticks = Array.from({ length: Math.floor(max / 25) + 1 }, (_, i) => i * 25);
   return (
     <Frame height={height}>
       <ResponsiveContainer width="100%" height="100%">
@@ -45,8 +49,8 @@ export function LackingChart({ data }: { data: LackingPoint[] }) {
           <CartesianGrid {...gridProps} vertical horizontal={false} />
           <XAxis
             type="number"
-            domain={[0, 110]}
-            ticks={[0, 25, 50, 75, 100]}
+            domain={[0, max]}
+            ticks={ticks}
             tickFormatter={(v: number) => `${v}%`}
             tick={{ fill: C.muted, fontSize: 11 }}
             axisLine={{ stroke: C.axis }}

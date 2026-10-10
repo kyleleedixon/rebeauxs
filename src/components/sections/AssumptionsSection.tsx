@@ -4,6 +4,13 @@ import { count, money, money2, percent, smart } from "@/lib/format";
 import type { Dashboard } from "@/lib/types";
 
 export function AssumptionsSection({ d }: { d: Dashboard }) {
+  const unitHeaders =
+    d.headers.unitEconomics?.filter(Boolean).length === 3
+      ? d.headers.unitEconomics
+      : ["Measure", "Value", "What it means"];
+  const unitIsNumeric = d.unitEconomics.some(
+    (k) => k.meaning !== "" && Number.isFinite(Number(k.meaning)),
+  );
   const guessShare = d.derived.guessShare;
   const total = d.derived.guessCount + d.derived.realCount;
 
@@ -177,18 +184,31 @@ export function AssumptionsSection({ d }: { d: Dashboard }) {
               </Card>
             ) : null}
             {d.unitEconomics.length ? (
-              <Card title="Unit economics" subtitle="What one bottle does.">
+              <Card
+                title={d.headers.unitEconomicsTitle?.[0] || "Unit economics"}
+                subtitle="What one bottle does."
+              >
                 <Table
                   dense
-                  headers={["Measure", "Value", "What it means"]}
-                  align={["left", "right", "left"]}
-                  rows={d.unitEconomics.map((k) => [
-                    k.measure,
-                    smart(k.measure, k.value),
-                    <span key="m" className="text-ink2">
-                      {k.meaning || "—"}
-                    </span>,
-                  ])}
+                  headers={unitHeaders}
+                  align={["left", "right", unitIsNumeric ? "right" : "left"]}
+                  rows={d.unitEconomics.map((k) => {
+                    // This block is a real table (Product | Price | Cost), so
+                    // format each column by its own heading, not the row label.
+                    const third = Number(k.meaning);
+                    const thirdIsNumber = k.meaning !== "" && Number.isFinite(third);
+                    return [
+                      k.measure,
+                      smart(unitHeaders[1] || k.measure, k.value),
+                      thirdIsNumber ? (
+                        smart(unitHeaders[2] || k.measure, third)
+                      ) : (
+                        <span key="m" className="text-ink2">
+                          {k.meaning || "—"}
+                        </span>
+                      ),
+                    ];
+                  })}
                 />
               </Card>
             ) : null}
