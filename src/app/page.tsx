@@ -93,7 +93,10 @@ export default async function Page() {
         </div>
         <p className="mt-2 text-xs text-muted">
           This page only reads. Edits are made in the Sheet only — nothing typed here would
-          change anything. Private: do not share the link or screenshots.
+          change anything.{" "}
+          {process.env.DASHBOARD_PASSWORD
+            ? "Private: do not share the link or screenshots."
+            : "No password is set, so anyone with the link can read this — treat the link itself as the secret."}
         </p>
         {d.meta.tabHealth.length ? (
           <p className="mt-2 text-xs text-muted">

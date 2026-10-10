@@ -44,8 +44,8 @@ Copy `.env.example` to `.env.local` for local work.
 | `SHEET_ID` | `1ZWSCLyoDXbT8eXqLzgngf-mhnD4bVczerdWhRYkMuf8` |
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | `client_email` from the key JSON |
 | `GOOGLE_PRIVATE_KEY` | `private_key` from the key JSON, newlines written as `\n`, wrapped in double quotes |
-| `DASHBOARD_USER` | Username for the site password prompt (default `rbx`) |
-| `DASHBOARD_PASSWORD` | Password for the site. **Required in production.** |
+| `DASHBOARD_USER` | Username for the site password prompt (default `rbx`). Only used if a password is set. |
+| `DASHBOARD_PASSWORD` | Optional. Set it and the whole site asks for a password; leave it unset and the site is open to anyone with the URL. |
 | `DEMO_MODE` | Local layout work only — see below. Leave unset everywhere else. |
 
 `GOOGLE_PRIVATE_KEY` must look like this, on one line:
@@ -65,8 +65,8 @@ cp .env.example .env.local   # then fill in the three Google values
 npm run dev                  # http://localhost:3000
 ```
 
-Without a `DASHBOARD_PASSWORD`, local development runs without the password prompt.
-A production deployment without it refuses to serve (503) rather than sit open.
+Without a `DASHBOARD_PASSWORD` the site runs open, locally and in production.
+Set the variable (and redeploy) to put a password in front of every route.
 
 ## 4 · Deploy to Vercel
 
@@ -93,12 +93,18 @@ After changing any variable, **redeploy** — env vars are baked into a deployme
 
 ### Keeping it private
 
-Two independent locks; use either or both:
+**As deployed there is no password** — the URL is the only thing keeping this
+private, so treat the link as the secret and don't let it get indexed or forwarded.
+The page sets `robots: noindex`, which keeps it out of search results but is not
+access control.
 
-- **This app's password.** `src/proxy.ts` puts HTTP basic auth in front of every
-  route using `DASHBOARD_USER` / `DASHBOARD_PASSWORD`.
-- **Vercel Password Protection.** Project → Settings → Deployment Protection →
-  Password Protection (available on paid plans). Protects preview URLs too.
+To lock it, either:
+
+- **Set `DASHBOARD_PASSWORD`** (plus optional `DASHBOARD_USER`) in Vercel and
+  redeploy. `src/proxy.ts` then puts HTTP basic auth in front of every route.
+- **Use Vercel Deployment Protection.** Project → Settings → Deployment Protection.
+  Vercel Authentication limits access to your Vercel account; Password Protection
+  is a paid-plan feature. Either works on top of the app, and protects preview URLs.
 
 There are **no API routes**: nothing serves Sheet rows as JSON. The Log tab (store
 names, dollar amounts) is aggregated on the server and only totals are rendered.
