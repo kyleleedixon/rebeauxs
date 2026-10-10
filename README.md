@@ -12,7 +12,7 @@ Charts and KPI tiles first, tables second. Every number is marked **Real** or **
 - The Sheet is the single source of truth. **No Sheet data is stored in this repo.**
 - The page only reads. Nothing here can change the Sheet.
 - Next.js (App Router, TypeScript) · Tailwind · Recharts · deploys to Vercel.
-- Server-side read every 5 minutes (`revalidate = 300`). Credentials never reach the browser.
+- Server-side read every 60 seconds (`revalidate = 60`). Credentials never reach the browser.
 
 ---
 
@@ -148,7 +148,7 @@ and skipped.
 
 ## 7 · Staleness and failures
 
-- The page re-reads the Sheet at most once every 5 minutes.
+- The page re-reads the Sheet at most once every 60 seconds.
 - On a failed read it serves the **last good data** with a visible "stale" banner —
   never a blank page. Last-good is held in memory and in a short-lived JSON file in
   the serverless instance's temp directory (`os.tmpdir()`), which is ephemeral and
@@ -160,7 +160,7 @@ and skipped.
 
 ## 7a · Instant refresh when the Sheet changes
 
-Without this, an edit shows up within about five minutes. With it, the Sheet
+Optional. Without it, an edit shows up within about a minute. With it, the Sheet
 pings the dashboard the moment you change a cell and the next load is current.
 
 1. **Add `REVALIDATE_TOKEN`** to the Vercel environment variables — any long
@@ -185,7 +185,7 @@ Notes:
   not fire dozens of refreshes.
 - Only human edits fire the trigger. A formula recalculating on its own, or a
   change made by another script, does not — those are picked up by the ordinary
-  5-minute refresh, which stays on as a backstop.
+  1-minute refresh, which stays on as a backstop.
 - `/api/revalidate` returns nothing but `{ok: true}`. It serves no Sheet data,
   and it is the only route exempt from the site password (it has its own token).
 
@@ -235,7 +235,7 @@ src/
 
 ## 11 · Day-to-day
 
-Edits are made **in the Sheet only**. The dashboard picks them up within 5 minutes;
-a hard refresh after that window shows the new numbers. If something looks wrong,
+Edits are made **in the Sheet only**. The dashboard picks them up within a minute;
+a reload after that window shows the new numbers. If something looks wrong,
 check the banner at the top of the page first — it says whether the data is live,
 stale, or demo.

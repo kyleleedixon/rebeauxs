@@ -9,8 +9,8 @@ import { NextResponse, type NextRequest } from "next/server";
  * a shared secret in REVALIDATE_TOKEN, sent either as the `x-revalidate-token`
  * header (preferred — query strings show up in logs) or a `?token=` parameter.
  *
- * The 5-minute background refresh stays on as a backstop, so a missed ping only
- * ever means "current within five minutes" rather than "stale forever".
+ * The 1-minute background refresh stays on as a backstop, so a missed ping only
+ * ever means "current within a minute" rather than "stale forever".
  */
 export const dynamic = "force-dynamic";
 

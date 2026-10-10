@@ -11,8 +11,11 @@ import { LocalTime } from "@/components/LocalTime";
 import { Card, Notice, Section } from "@/components/ui";
 import { sheetUrl } from "@/lib/sheets";
 
-/** Live read from the Sheet, re-fetched at most once every 5 minutes. */
-export const revalidate = 300;
+/**
+ * Live read from the Sheet, re-fetched at most once a minute. Keep this in step
+ * with the `revalidate` on the Sheets fetch in src/lib/sheets.ts.
+ */
+export const revalidate = 60;
 
 export default async function Page() {
   const result = await loadDashboard();
@@ -80,7 +83,7 @@ export default async function Page() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p>
             Last refreshed <LocalTime iso={d.meta.fetchedAt} />
-            <span className="text-muted"> · re-reads the Sheet every 5 minutes</span>
+            <span className="text-muted"> · re-reads the Sheet every minute</span>
           </p>
           <a
             className="font-medium text-ink underline decoration-hair underline-offset-4 hover:decoration-ink"

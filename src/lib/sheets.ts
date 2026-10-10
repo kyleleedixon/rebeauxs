@@ -100,7 +100,8 @@ const QUERY = "valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_N
 async function get(url: string, token: string): Promise<Response> {
   return fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
-    next: { revalidate: 300, tags: ["sheet"] },
+    // Keep in step with `export const revalidate` in src/app/page.tsx.
+    next: { revalidate: 60, tags: ["sheet"] },
   });
 }
 
